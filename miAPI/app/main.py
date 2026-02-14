@@ -50,31 +50,44 @@ async def leer_usuarios( ):
         "usuarios": usuarios
     }
 
-@app.post("/v1/usuarios/", tags=["CRUD HTTP"],status_code=status,HTTP_201_CREATED)
-async def crear_usuarios( usuario:dict):
+@app.post("/v1/usuarios/", tags=["CRUD HTTP"], status_code=status.HTTP_201_CREATED)
+async def crear_usuarios(usuario:dict):
     for usr in usuarios:
         if usr["id"] == usuario.get("id"):
             raise HTTPException(
                 status_code=400,
                 detail="El id ya existe"
             )
-    usuarios.append(Usuario)
+    usuarios.append(usuario)
     return{
         "mensaje":"Usuario Agregado",
         "Usuario":usuario
     }   
 
-@app.put("/v1/usuarios/", tags=["CRUD HTTP"],status_code=status,HTTP_201_CREATED)
-async def actualizar_usuarios( usuario:dict):
-    for usr in usuarios:
+@app.put("/v1/usuarios/", tags=["CRUD HTTP"], status_code=status.HTTP_200_OK)
+async def actualizar_usuarios(usuario:dict):
+    for i, usr in enumerate (usuarios):
         if usr["id"] == usuario.get("id"):
-            usuarios.append(Usuario)
+            usuarios[i] = usuario
             return{
-                "mensaje":"Usuario Actualizado",
-                "Usuario":usuario
+                 "mensaje":"Usuario Actualizado",
+                 "Usuario":usuario
+                 } 
+    raise HTTPException(
+        status_code=404,
+        detail="Usuario no encontrado"
+        )        
+
+@app.delete("/v1/usuarios/", tags=["CRUD HTTP"], status_code=status.HTTP_200_OK)
+async def eliminar_usuarios(usuario:dict):
+    for i,usr in enumerate(usuarios):
+        if usr["id"] == usuario.get("id"):
+            usuario_eliminado = usuarios.pop(i)
+            return{
+                "mensaje":"Usuario Eliminado",
+                "usuario": usuario_eliminado
             }
     raise HTTPException(
-        status_code=400,
-        detail="Ya existe"
-    )
-             
+        status_code=404,
+        detail="Usuario no encontrado"
+    )        
