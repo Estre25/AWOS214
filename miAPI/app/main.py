@@ -1,7 +1,10 @@
-from fastapi import FastAPI, status ,HTTPException 
+from fastapi import FastAPI, status ,HTTPException, Depends 
 import asyncio
 from typing import Optional
 from pydantic import BaseModel, Field
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
+
 #Instancia del servidor
 app = FastAPI(
     title="Mi primer API",
@@ -20,7 +23,18 @@ class usuario_create(BaseModel):
     nombre: str = Field(...,min_length=3,max_length=50, example="Estrella")
     edad: int = Field(...,ge=1,le=123, description="Edad valida entre 1 y 123")
 
-
+#Seguridad HTTP Basic
+security= HTTPBasic()
+def verificar_Peticion(credenciales: HTTPBasicCredentials = Depends(security)):
+    userAuth = secrets.compare_digest(credenciales.username, "Estrella")
+    passAuth = secrets.compare_digest(credenciales.password, "123456")
+    
+    if not (userAuth and passAuth):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales no Autorizadas"
+        )
+    return credenciales.username
 
 @app.get("/",tags=["Inicio"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
 async def bienvenida():
@@ -84,17 +98,22 @@ async def actualizar_usuario(usuario: dict):
         detail="El id no existe, no se puede actualizar"
     )
 
-@app.delete("/v1/usuarios/{id}", tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
-async def eliminar_usuario(usuario: dict):
-    for usr in usuarios:
-        if usr["id"] == usuario.get("id"):
+@app.delete("/v1/usuaris/{id}", tags=["CRUD HTTP"])
+async def eliminar_usuario(id: int, userAuth: str = Depends(verificar_Peticion)):
+    # Buscar el usuario por id
+    for usuario in usuarios:
+        if usuario["id"] == id:
             usuarios.remove(usuario)
-            return{
-                "status":"200",
-                "mensaje":"Usuario eliminado",
-                "Usuario":usuario
+            return {
+                "status": "200",
+                "mensaje": f"Usuario eliminado por {userAuth}",
+                "usuario_eliminado": usuario
             }
+    
+    # Si no encuentra el id
     raise HTTPException(
         status_code=400,
         detail="El id no existe, no se puede eliminar"
     )
+
+
