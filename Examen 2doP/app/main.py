@@ -24,17 +24,26 @@ def verificar_Peticion(credenciales: HTTPBasicCredentials = Depends(security)):
         )
     return credenciales.username
 
-libros = []          
-prestamos = []       
-contador_libros = 1  
-contador_prestamos = 1  
+tickets = []                
+contador_tickets = 1   
 
-class Usuario(BaseModel):
+class ticketCreate(BaseModel):
     nombre: str = Field(..., min_length=5, max_length=50, example="Estrella Marco")
     descripción: str= Field(...,gt=0, description="Se trabo")
     Prioridad: str= Field(...,gt=0, description="baja,media o alta")
-    Estado: str= Field(...,gt=0, default="pendiente")
-   
+class ticket(ticketCreate):
+    id: int
+    estado: str = "disponible"
+
+@app.get("/v1/parametroOp/",tags=["Parametro Opcional"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
+async def consultaTodos(id:Optional[int]=None):
+    if id is not None:
+        for ticket in tickets:
+            if ticket["id"] == id:
+                return{"Mensaje": "ticket encontrado", "ticket": ticket}
+        return{"Mensaje": "ticket no encontrado", "ticket": id}
+    else:
+        return{"Mensaje": "No se proporcionó ID"}
 
 @app.get("/v1/tickets/{id}",tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
 async def leer_tickets():
@@ -43,19 +52,51 @@ async def leer_tickets():
         "total": len(ticket)
         }  # Formato JSON
 
-@app.post("/v1/tickets/{id}",tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
-async def crear_tickets(ticket:ticket_create):
-    for tck in ticket:
-        if tck["id"] == ticket.id:
-            raise HTTPException(
-                status_code=400,
-                detail="El id ya existe"
-            )
-    tickets.append(ticket)
-    return{
-        "mensaje":"ticket creado",
-        "ticket":ticket
-    }   
+class Prestamo(PrestamoCreate):
+    id: int
+    fecha_prestamo: datetime
+    fecha_devolucion: Optional[datetime] = None
+    activo: bool = True
+
+
+@app.get("/", tags=["Inicio"])
+async def bienvenida():
+    return {
+        "mensaje": "¡Bienvenido a la Biblioteca Digital!",
+        "endpoints": {
+            "POST /libros": "Registrar un libro",
+            "GET /libros": "Listar todos los libros disponibles",
+            "GET /libros/buscar/{nombre}": "Buscar libro por nombre",
+            "POST /prestamos": "Registrar préstamo",
+            "PUT /prestamos/{id}/devolver": "Marcar libro como devuelto",
+            "DELETE /prestamos/{id}": "Eliminar registro de préstamo"
+        }
+    }
+
+# Registrar 
+@app.post("/tickets", status_code=status.HTTP_201_CREATED, tags=["tickets"])
+async def registrar_tickets(ticket: ticketCreate):
+    global contador_tickets
+    
+    # Valida el nombre 
+    if not tickets.nombre or len(tickets.nombre.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El nombre del tickets no es válido"
+        )
+    
+    nuevo_ticket = Libro(
+        id=contador_libros,
+        **libro.dict()
+    )
+    libros.append(nuevo_libro)
+    contador_libros += 1
+    
+    return {
+        "status": "201",
+        "mensaje": "Libro registrado exitosamente",
+        "libro": nuevo_libro
+    }  
 @app.put("/v1/tickets/{id}", tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
 async def actualizar_tickets(ticket: dict):
     for tck in tickets:
@@ -72,113 +113,66 @@ async def actualizar_tickets(ticket: dict):
         detail="El id no existe, no se puede actualizar"
     )
 
+
 # Buscar 
-@app.get("/libros/buscar/{id}", tags=["Libros"])
-async def buscar_por_nombre(nombre: str):
-    # Validar el nombre 
+@app.get("/tickets/buscar/{id}", tags=["tickets"])
+async def buscar_por_id(id: int, userAuth: str = Depends(verificar_Peticion)):
+    # Validar el id
     if not id or len(id.strip()) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de búsqueda no es válido"
+            detail="El id de búsqueda no es válido"
         )
     
     resultados = []
-    for libro in libros:
-        if nombre.lower() in libro.nombre.lower():
-            resultados.append(libro)
+    for ticket in tickets:
+        if id.lower() in ticket.id.lower():
+            resultados.append(ticket)
     
     return {
         "status": "200",
-        "busqueda": nombre,
+        "busqueda": id,
         "total": len(resultados),
-        "libros": resultados
+        "ticket": resultados
     }
+
+    raise HTTPException(
+        status_code=400,
+        detail="El id no existe"
+    )
+    
 
     
     # Actualizar estado
-    libro_encontrado.estado = "prestado"
+    ticket_encontrado.estado = "prestado"
     
-    # Crear préstamo
-    nuevo_prestamo = Prestamo(
-        id=contador_prestamos,
-        **prestamo.dict(),
-        fecha_prestamo=datetime.now()
-    )
-    prestamos.append(nuevo_prestamo)
-    contador_prestamos += 1
     
-    return {
-        "status": "201",
-        "mensaje": "Préstamo registrado exitosamente",
-        "prestamo": nuevo_prestamo
-    }
 
-
-# Eliminar el registro de un préstamo
-@app.delete("/prestamos/{id}", tags=["Préstamos"])
-async def eliminar_prestamo(id: int):
-    # Buscar el préstamo
-    prestamo_encontrado = None
-    for prestamo in prestamos:
-        if prestamo.id == id:
-            prestamo_encontrado = prestamo
-            break
-    
-    # 404 si el préstamo no existe
-    if not prestamo_encontrado:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Préstamo no encontrado"
-        )
-    
-    # 409 si el préstamo ya no existe
-    if not prestamo_encontrado.activo:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="El registro de préstamo ya no existe"
-        )
-    
-    # Si está activo, devolver el libro
-    if prestamo_encontrado.activo:
-        for libro in libros:
-            if libro.id == prestamo_encontrado.libro_id:
-                libro.estado = "disponible"
-                break
-    
-   @app.delete("/v1/usuarios/", tags=["CRUD HTTP"], status_code=status.HTTP_200_OK)
-async def eliminar_usuarios(usuario:dict):
-    for i,usr in enumerate(usuarios):
-@app.delete("/v1/usuarios/{id}", tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
-async def eliminar_usuario(usuario: dict):
-    for usr in usuarios:
-        if usr["id"] == usuario.get("id"):
-            usuario_eliminado = usuarios.pop(i)
-            usuarios.remove(usuario)
+@app.delete("/v1/tickets/{id}", tags=["CRUD HTTP"])  # Endpoint de inicio, todos los endpoints se acompañan de una función
+async def eliminar_tickets(ticket: dict):
+    for tck in tickets:
+        if tck["id"] == ticket.get("id"):
+            tickets.remove(ticket)
             return{
-                "mensaje":"Usuario Eliminado",
-                "usuario": usuario_eliminado
                 "status":"200",
-                "mensaje":"Usuario eliminado",
-                "Usuario":usuario
+                "mensaje":"ticket eliminado",
+                "Tickets":ticket
             }
-    raise HTTPException(
-        status_code=404,
-        detail="Usuario no encontrado"
-    )        
+    raise HTTPException(       
         status_code=400,
         detail="El id no existe, no se puede eliminar"
     )
 
-# Endpoint para obtener un libro específico
-@app.get("/libros/{id}", tags=["Libros"])
-async def obtener_libro(id: int):
-    for libro in libros:
-        if libro.id == id:
+# Endpoint para obtener específico
+@app.get("/tickets/{id}", tags=["tickets"])
+async def obtener_tickets(id: int):
+    for ticket in tickets:
+        if ticket.id == id:
             return {
                 "status": "200",
-                "libro": libro
+                "ticket": ticket
             }
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="Libro no encontrado"
+        detail="ticket no encontrado"
     )
